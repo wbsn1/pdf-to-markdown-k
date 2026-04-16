@@ -15,6 +15,18 @@
 body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; padding: 24px; color: #1a1a2e; }
 h1 { text-align: center; font-size: 1.4rem; margin-bottom: 4px; color: #2d3561; }
 .subtitle { text-align: center; color: #888; font-size: 0.82rem; margin-bottom: 20px; }
+.apikey-bar {
+  background: #fff; border-radius: 12px; padding: 10px 14px;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07); flex-wrap: wrap;
+}
+.apikey-bar label { font-size: 0.82rem; color: #555; white-space: nowrap; }
+.apikey-bar input { flex: 1; min-width: 200px; border: 1px solid #ddd; border-radius: 8px; padding: 6px 10px; font-size: 0.82rem; font-family: monospace; color: #333; }
+.apikey-bar button { background: #4a4fd4; color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; white-space: nowrap; }
+.apikey-bar button:hover { background: #3a3fc4; }
+.apikey-status { font-size: 0.78rem; white-space: nowrap; }
+.apikey-status.ok { color: #27ae60; }
+.apikey-status.none { color: #aaa; }
 #dropzone {
   border: 2.5px dashed #7c83e0; border-radius: 16px;
   background: #fff; padding: 32px 20px;
@@ -75,7 +87,14 @@ button.secondary:hover { background: #eef0ff; }
 <h1>📄 決算短信 → Markdown 変換</h1>
 <p class="subtitle">決算短信PDFをドラッグ＆ドロップ、またはクリックして選択</p>
 
-<div id="dropzone" onclick="document.getElementById('fileInput').click()">
+<div class="apikey-bar">
+  <label>🔑 Gemini APIキー:</label>
+  <input type="password" id="apiKeyInput" placeholder="AIza... を入力" autocomplete="off">
+  <button onclick="saveApiKey()">保存</button>
+  <span class="apikey-status none" id="apiKeyStatus">未設定</span>
+</div>
+
+
   <div class="icon">📂</div>
   <p>ここにPDFをドロップ</p>
   <small>複数ファイル対応 / クリックでも選択可</small>
@@ -103,6 +122,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 
 let files = [];
 let previewIdx = 0;
+
+updateApiKeyStatus();
 
 // ── 決算短信フッター除去パターン ──────────────────────────────
 // ページ番号（単独数字・「- N -」形式）
@@ -280,6 +301,7 @@ async function generateNameSuggestion(entry) {
     const allH = Object.values(lineMap).flat().map(i => i.h);
     const maxH = Math.max(...allH, 12);
 
+    // フォントスコアによる候補（フォールバック用）
     const scored = [];
     for (const [, items] of Object.entries(lineMap)) {
       const sorted = items.sort((a, b) => a.x - b.x);
@@ -295,10 +317,26 @@ async function generateNameSuggestion(entry) {
     scored.sort((a, b) => b.score - a.score);
     const top = scored.slice(0, 3).filter(l => l.score > 10);
     if (top.length > 0) {
-      entry.suggestedName = toFileName(top[0].text);
-      entry.outName = entry.suggestedName;
       entry.nameCandidates = top.map(l => ({ label: toFileName(l.text), score: Math.round(l.score) }));
+      entry.outName = entry.nameCandidates[0].label;
     }
+
+    // Gemini APIが設定されていればAI命名を優先
+    if (getApiKey()) {
+      const pageTexts = [];
+      for (const ys of Object.keys(lineMap).map(Number).sort((a,b)=>a-b)) {
+        const t = lineMap[ys].sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim();
+        if (t) pageTexts.push(t);
+      }
+      const aiName = await generateNameWithGemini(pageTexts.join('\n'));
+      if (aiName) {
+        entry.outName = aiName;
+        entry.suggestedName = aiName;
+        // AI候補を先頭に追加
+        entry.nameCandidates = [{ label: aiName, score: 100, ai: true }, ...(entry.nameCandidates || [])];
+      }
+    }
+
   } catch(e) {}
   entry.suggestionReady = true;
   render();
@@ -356,7 +394,7 @@ function render() {
       suggestHTML = `<div class="suggest-row"><span class="suggest-loading">📖 候補生成中…</span></div>`;
     } else if (f.nameCandidates?.length) {
       const chips = f.nameCandidates.map((c, ci) =>
-        `<span class="suggest-chip ${c.label === f.outName ? 'active-chip' : ''}" onclick="applyCandidate(${i},${ci})">${esc(c.label)}</span>`
+        `<span class="suggest-chip ${c.label === f.outName ? 'active-chip' : ''}" onclick="applyCandidate(${i},${ci})">${c.ai ? '🤖 ' : ''}${esc(c.label)}</span>`
       ).join('');
       suggestHTML = `<div class="suggest-row"><span class="suggest-label">💡</span>${chips}</div>`;
     }
