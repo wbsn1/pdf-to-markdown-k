@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<!--
+  決算短信 → Markdown 変換ツール
+  使い方: このHTMLファイルをブラウザで開くだけで使えます。
+  インターネット接続が必要です（PDF.jsをCDNから読み込むため）。
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>決算短信 → Markdown 変換</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; padding: 24px; color: #1a1a2e; }
+h1 { text-align: center; font-size: 1.4rem; margin-bottom: 4px; color: #2d3561; }
+.subtitle { text-align: center; color: #888; font-size: 0.82rem; margin-bottom: 20px; }
+#dropzone {
+  border: 2.5px dashed #7c83e0; border-radius: 16px;
+  background: #fff; padding: 32px 20px;
+  text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
+}
+#dropzone.drag-over { background: #eef0ff; border-color: #4a4fd4; }
+#dropzone .icon { font-size: 2.2rem; margin-bottom: 8px; }
+#dropzone p { color: #555; font-size: 0.9rem; }
+#dropzone small { color: #999; font-size: 0.78rem; }
+#fileInput { display: none; }
+#fileList { margin-bottom: 16px; }
+.file-item {
+  background: #fff; border-radius: 10px;
+  padding: 10px 14px; margin-bottom: 8px;
+  display: flex; align-items: flex-start; gap: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+.file-icon { font-size: 1.3rem; padding-top: 2px; }
+.file-info { flex: 1; min-width: 0; }
+.file-name { font-size: 0.88rem; font-weight: 600; color: #2d3561; word-break: break-all; }
+.file-name-edit { font-size: 0.82rem; color: #555; margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.file-name-edit label { color: #888; white-space: nowrap; }
+.file-name-edit input { border: 1px solid #ddd; border-radius: 6px; padding: 3px 8px; font-size: 0.8rem; color: #333; flex: 1; min-width: 100px; }
+.suggest-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.suggest-label { font-size: 0.76rem; color: #888; white-space: nowrap; }
+.suggest-chip { background: #fff7e0; border: 1px solid #f0c040; border-radius: 20px; padding: 2px 9px; font-size: 0.76rem; color: #7a5c00; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-chip:hover { background: #fff0b0; }
+.suggest-chip.active-chip { background: #e8f5e9; border-color: #66bb6a; color: #2e7d32; }
+.suggest-loading { font-size: 0.76rem; color: #bbb; }
+.status { font-size: 0.78rem; margin-top: 4px; }
+.status.waiting { color: #aaa; }
+.status.processing { color: #f0a500; }
+.status.done { color: #27ae60; }
+.status.error { color: #e74c3c; }
+.remove-btn { background: none; border: none; cursor: pointer; color: #ccc; font-size: 1rem; padding: 4px; flex-shrink: 0; }
+.remove-btn:hover { color: #e74c3c; }
+.actions { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+button.primary { background: #4a4fd4; color: #fff; border: none; border-radius: 10px; padding: 11px 26px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+button.primary:hover { background: #3a3fc4; }
+button.primary:disabled { background: #aab; cursor: not-allowed; }
+button.secondary { background: #fff; color: #4a4fd4; border: 2px solid #4a4fd4; border-radius: 10px; padding: 11px 18px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+button.secondary:hover { background: #eef0ff; }
+#preview { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); display: none; }
+#previewTabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.tab { padding: 4px 12px; border-radius: 20px; border: 1px solid #ddd; background: #f5f5f5; cursor: pointer; font-size: 0.8rem; color: #666; }
+.tab.active { background: #4a4fd4; color: #fff; border-color: #4a4fd4; }
+#previewContent { background: #f8f9ff; border-radius: 8px; padding: 14px; max-height: 300px; overflow-y: auto; font-size: 0.82rem; white-space: pre-wrap; word-break: break-word; font-family: 'Courier New', monospace; color: #333; line-height: 1.6; }
+.preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.preview-header span { font-size: 0.95rem; font-weight: 600; color: #2d3561; }
+.dl-btn { background: #27ae60; color: #fff; border: none; border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; cursor: pointer; }
+.dl-btn:hover { background: #219150; }
+#emptyMsg { text-align: center; color: #bbb; padding: 16px; font-size: 0.88rem; }
+.stats { font-size: 0.76rem; color: #aaa; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<h1>📄 決算短信 → Markdown 変換</h1>
+<p class="subtitle">決算短信PDFをドラッグ＆ドロップ、またはクリックして選択</p>
+
+<div id="dropzone" onclick="document.getElementById('fileInput').click()">
+  <div class="icon">📂</div>
+  <p>ここにPDFをドロップ</p>
+  <small>複数ファイル対応 / クリックでも選択可</small>
+</div>
+<input type="file" id="fileInput" accept=".pdf" multiple>
+
+<div id="fileList"><div id="emptyMsg">ファイルがまだ追加されていません</div></div>
+
+<div class="actions">
+  <button class="primary" id="convertBtn" disabled onclick="convertAll()">▶ 変換開始</button>
+  <button class="secondary" id="dlAllBtn" style="display:none" onclick="downloadAll()">⬇ まとめてダウンロード</button>
+</div>
+
+<div id="preview">
+  <div class="preview-header">
+    <span>プレビュー</span>
+    <button class="dl-btn" onclick="downloadCurrent()">⬇ このファイルをDL</button>
+  </div>
+  <div id="previewTabs"></div>
+  <pre id="previewContent"></pre>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let files = [];
+let previewIdx = 0;
+
+// ── 決算短信フッター除去パターン ──────────────────────────────
+// ページ番号（単独数字・「- N -」形式）
+// 社名行（〇〇株式会社、〇〇投資法人など）
+// 決算短信ヘッダ/フッタ行（「決算短信」「有価証券報告書」を含む行）
+// セクション名フッタ（短い行で特定キーワード）
+const FOOTER_RES = [
+  /^\s*[\-－―─]\s*\d+\s*[\-－―─]\s*$/,
+  /^\s*\d+\s*$/,
+  /決算短信/,
+  /有価証券報告書/,
+  /投資法人\s*[（(]\d+[)）]/,
+  /^.{0,30}(株式会社|投資法人|ホールディングス).{0,15}$/,
+];
+
+// 決算短信でよく現れる不要な繰り返しテキスト
+const SKIP_EXACT = new Set(['以上', '（単位：千円）', '（単位：百万円）', '- -']);
+
+function isFooter(text) {
+  const t = text.trim();
+  if (!t || t.length < 1) return true;
+  if (SKIP_EXACT.has(t)) return false; // 財務諸表内では必要な場合あり → 除去しない
+  return FOOTER_RES.some(re => re.test(t));
+}
+
+// ── フォントサイズ・パターンによる見出し検出 ─────────────────
+function detectHeading(text, avgH, maxH, isFirst) {
+  const r = avgH / maxH;
+  if (r >= 0.95 || (isFirst && r >= 0.8)) return 1;
+  if (r >= 0.80) return 2;
+  if (/^[（(][１-９1-9A-ZＡ-Ｚ①-⑩][）)]\s/.test(text)) return 3;
+  if (/^[１-９1-9]+[．.]\s/.test(text)) return 2;
+  if (/^第\d+[章節期]/.test(text)) return 2;
+  if (avgH >= 13.5) return 3;
+  return 0;
+}
+
+// ── 同y行を列ブロックに分割 ──────────────────────────────────
+function splitCols(items) {
+  if (items.length <= 1) return [items];
+  const s = [...items].sort((a, b) => a.x - b.x);
+  const cols = [[s[0]]];
+  for (let i = 1; i < s.length; i++) {
+    const p = s[i-1], c = s[i];
+    const gap = c.x - (p.x + (p.width || p.str.length * (p.h||10) * 0.55));
+    if (gap > (p.h||10) * 3) cols.push([c]);
+    else cols[cols.length-1].push(c);
+  }
+  return cols;
+}
+
+// ── 数値かどうか判定（財務表の列） ───────────────────────────
+function isNumericCell(text) {
+  return /^[\d,，\s△▲\+\-－−（）()％%\.]+$/.test(text.trim()) && text.trim().length > 0;
+}
+
+// ── 同ページ内で「表っぽい行」かどうか判定 ───────────────────
+// 複数列かつ数値列を含む → Markdownテーブルで出力
+function tryBuildTableRow(colTexts) {
+  if (colTexts.length < 2) return null;
+  const numCount = colTexts.filter(isNumericCell).length;
+  if (numCount >= 1 && colTexts.length >= 2) {
+    return '| ' + colTexts.join(' | ') + ' |';
+  }
+  return null;
+}
+
+// ── PDF → Markdown 変換メイン ────────────────────────────────
+async function pdfToMarkdown(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const lines = [];
+  let totalChars = 0;
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    const pageH = viewport.height;
+
+    const lineMap = {};
+    for (const item of tc.items) {
+      if (!item.str?.trim()) continue;
+      const y = Math.round((pageH - item.transform[5]) / 2) * 2;
+      if (!lineMap[y]) lineMap[y] = [];
+      lineMap[y].push({ x: item.transform[4], str: item.str, h: item.height || 12, width: item.width || 0 });
+    }
+
+    const allH = Object.values(lineMap).flat().map(i => i.h);
+    const maxH = Math.max(...allH, 12);
+    const sortedYs = Object.keys(lineMap).map(Number).sort((a, b) => a - b);
+
+    if (p > 1) lines.push('\n---\n');
+
+    let prevY = null;
+    let isFirst = true;
+    let tableMode = false;
+    let tableHeader = false;
+
+    for (const y of sortedYs) {
+      const items = lineMap[y].sort((a, b) => a.x - b.x);
+      const cols = splitCols(items);
+      const colTexts = cols.map(c => c.map(i => i.str).join('').replace(/\s+/g, ' ').trim()).filter(Boolean);
+      if (!colTexts.length) continue;
+      if (colTexts.every(t => isFooter(t))) continue;
+
+      const lineText = colTexts.join('\t');
+      if (!lineText.trim()) continue;
+
+      const avgH = items.reduce((s, i) => s + (i.h||12), 0) / items.length;
+      const gap = prevY !== null ? (y - prevY) : 0;
+
+      // 見出しは表モードを終了させる
+      const level = detectHeading(colTexts[0], avgH, maxH, isFirst);
+      if (level > 0) {
+        if (tableMode) { lines.push(''); tableMode = false; tableHeader = false; }
+        if (gap > 20 && prevY !== null) lines.push('');
+        lines.push('#'.repeat(level) + ' ' + colTexts.join(' '));
+        prevY = y; isFirst = false;
+        continue;
+      }
+
+      // 複数列 → テーブル行として処理
+      if (colTexts.length >= 2) {
+        const tableRow = tryBuildTableRow(colTexts);
+        if (tableRow) {
+          if (!tableMode) {
+            if (gap > 20 && prevY !== null) lines.push('');
+            tableMode = true;
+            tableHeader = false;
+          }
+          if (!tableHeader) {
+            // ヘッダ行（最初の行）とセパレータを追加
+            lines.push(tableRow);
+            lines.push('|' + colTexts.map(() => ' --- ').join('|') + '|');
+            tableHeader = true;
+          } else {
+            lines.push(tableRow);
+          }
+          prevY = y; isFirst = false;
+          continue;
+        }
+      }
+
+      // 通常テキスト
+      if (tableMode) { lines.push(''); tableMode = false; tableHeader = false; }
+      if (gap > 20 && prevY !== null) lines.push('');
+      lines.push(lineText);
+      prevY = y; isFirst = false;
+    }
+  }
+
+  const md = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  totalChars = md.length;
+  return { md, totalChars };
+}
+
+// ── ファイル名候補生成 ────────────────────────────────────────
+async function generateNameSuggestion(entry) {
+  try {
+    const buf = await entry.file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const tc = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    const pageH = viewport.height;
+
+    const lineMap = {};
+    for (const item of tc.items) {
+      if (!item.str.trim()) continue;
+      const y = Math.round((pageH - item.transform[5]) / 2) * 2;
+      if (!lineMap[y]) lineMap[y] = [];
+      lineMap[y].push({ x: item.transform[4], str: item.str, h: item.height || 12 });
+    }
+    const allH = Object.values(lineMap).flat().map(i => i.h);
+    const maxH = Math.max(...allH, 12);
+
+    const scored = [];
+    for (const [, items] of Object.entries(lineMap)) {
+      const sorted = items.sort((a, b) => a.x - b.x);
+      const text = sorted.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (text.length < 3) continue;
+      const avgH = sorted.reduce((s, i) => s + i.h, 0) / sorted.length;
+      const ratio = avgH / maxH;
+      const fontScore = ratio * 50;
+      const lenScore = text.length >= 5 && text.length <= 30 ? 30 : text.length > 30 && text.length <= 50 ? 15 : 0;
+      const penalty = /^[\d\s\.\-\:\/（）]+$/.test(text) ? -30 : 0;
+      scored.push({ text, score: fontScore + lenScore + penalty });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, 3).filter(l => l.score > 10);
+    if (top.length > 0) {
+      entry.suggestedName = toFileName(top[0].text);
+      entry.outName = entry.suggestedName;
+      entry.nameCandidates = top.map(l => ({ label: toFileName(l.text), score: Math.round(l.score) }));
+    }
+  } catch(e) {}
+  entry.suggestionReady = true;
+  render();
+}
+
+function toFileName(text) {
+  return text.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_').substring(0, 60).replace(/^_+|_+$/g, '');
+}
+
+// ── UI ───────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileListEl = document.getElementById('fileList');
+const convertBtn = document.getElementById('convertBtn');
+const dlAllBtn = document.getElementById('dlAllBtn');
+const preview = document.getElementById('preview');
+const previewTabs = document.getElementById('previewTabs');
+const previewContent = document.getElementById('previewContent');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+function addFiles(fileObjs) {
+  for (const f of fileObjs) {
+    if (f.type !== 'application/pdf') continue;
+    const base = f.name.replace(/\.pdf$/i, '');
+    const entry = { file: f, outName: base, suggestedName: null, suggestionReady: false, status: 'waiting', mdContent: null, charCount: 0 };
+    files.push(entry);
+    generateNameSuggestion(entry);
+  }
+  render();
+}
+
+function applyCandidate(i, ci) { files[i].outName = files[i].nameCandidates[ci].label; render(); }
+
+function render() {
+  fileListEl.innerHTML = '';
+  if (!files.length) {
+    fileListEl.innerHTML = '<div id="emptyMsg">ファイルがまだ追加されていません</div>';
+    convertBtn.disabled = true; dlAllBtn.style.display = 'none'; preview.style.display = 'none';
+    return;
+  }
+  convertBtn.disabled = false;
+  const statusMap = { waiting: ['waiting','待機中'], processing: ['processing','変換中…'], done: ['done','✓ 完了'], error: ['error','✗ エラー'] };
+
+  files.forEach((f, i) => {
+    const [sc, st] = statusMap[f.status];
+    const div = document.createElement('div');
+    div.className = 'file-item';
+
+    let suggestHTML = '';
+    if (!f.suggestionReady) {
+      suggestHTML = `<div class="suggest-row"><span class="suggest-loading">📖 候補生成中…</span></div>`;
+    } else if (f.nameCandidates?.length) {
+      const chips = f.nameCandidates.map((c, ci) =>
+        `<span class="suggest-chip ${c.label === f.outName ? 'active-chip' : ''}" onclick="applyCandidate(${i},${ci})">${esc(c.label)}</span>`
+      ).join('');
+      suggestHTML = `<div class="suggest-row"><span class="suggest-label">💡</span>${chips}</div>`;
+    }
+
+    const statsHTML = f.charCount ? `<div class="stats">約 ${f.charCount.toLocaleString()} 文字</div>` : '';
+
+    div.innerHTML = `
+      <div class="file-icon">📄</div>
+      <div class="file-info">
+        <div class="file-name">${esc(f.file.name)}</div>
+        <div class="file-name-edit">
+          <label>保存名:</label>
+          <input type="text" value="${esc(f.outName)}" oninput="files[${i}].outName=this.value;render()">
+          <span style="color:#999;font-size:0.78rem">.md</span>
+        </div>
+        ${suggestHTML}
+        <div class="status ${sc}">${st}</div>
+        ${statsHTML}
+      </div>
+      ${f.mdContent ? `<button class="secondary" style="padding:5px 10px;font-size:0.78rem;white-space:nowrap;flex-shrink:0" onclick="showPreview(${i})">プレビュー</button>` : ''}
+      <button class="remove-btn" onclick="removeFile(${i})">✕</button>
+    `;
+    fileListEl.appendChild(div);
+  });
+
+  const done = files.filter(f => f.status === 'done');
+  dlAllBtn.style.display = done.length > 1 ? 'inline-block' : 'none';
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function removeFile(i) { files.splice(i, 1); render(); if (!files.length || previewIdx >= files.length) preview.style.display = 'none'; }
+
+async function convertAll() {
+  convertBtn.disabled = true;
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].status === 'done') continue;
+    files[i].status = 'processing'; render();
+    try {
+      const { md, totalChars } = await pdfToMarkdown(files[i].file);
+      files[i].mdContent = md;
+      files[i].charCount = totalChars;
+      files[i].status = 'done';
+    } catch(e) { files[i].status = 'error'; console.error(e); }
+    render();
+  }
+  convertBtn.disabled = false;
+  const doneIdx = files.findIndex(f => f.status === 'done');
+  if (doneIdx >= 0) showPreview(doneIdx);
+}
+
+function showPreview(i) {
+  previewIdx = i;
+  preview.style.display = 'block';
+  previewContent.textContent = files[i].mdContent || '';
+  updateTabs();
+  preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function updateTabs() {
+  previewTabs.innerHTML = '';
+  files.filter(f => f.status === 'done').forEach(f => {
+    const ri = files.indexOf(f);
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (ri === previewIdx ? ' active' : '');
+    btn.textContent = f.outName || f.file.name;
+    btn.onclick = () => showPreview(ri);
+    previewTabs.appendChild(btn);
+  });
+}
+
+function downloadCurrent() { const f = files[previewIdx]; if (f?.mdContent) dl(f.outName + '.md', f.mdContent); }
+function downloadAll() { files.filter(f => f.status === 'done').forEach(f => dl(f.outName + '.md', f.mdContent)); }
+function dl(name, content) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: 'text/markdown' }));
+  a.download = name; a.click();
+}
+</script>
+</body>
+</html>
