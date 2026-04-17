@@ -28,14 +28,33 @@ h1 { text-align: center; font-size: 1.4rem; margin-bottom: 4px; color: #2d3561; 
 .apikey-status.ok { color: #27ae60; }
 .apikey-status.none { color: #aaa; }
 #dropzone {
-  border: 2.5px dashed #7c83e0; border-radius: 16px;
-  background: #fff; padding: 32px 20px;
-  text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
+  border: 3px dashed #4a4fd4;
+  border-radius: 16px;
+  background: #eef0ff;
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 16px;
 }
-#dropzone.drag-over { background: #eef0ff; border-color: #4a4fd4; }
-#dropzone .icon { font-size: 2.2rem; margin-bottom: 8px; }
-#dropzone p { color: #555; font-size: 0.9rem; }
-#dropzone small { color: #999; font-size: 0.78rem; }
+#dropzone:hover { background: #e4e6f9; }
+#dropzone.drag-over { background: #d6d9f7; transform: scale(1.01); }
+#dropzone .icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
+#dropzone .drop-title { color: #2d3561; font-size: 1rem; font-weight: 600; margin-bottom: 14px; }
+#dropzone .drop-btn {
+  display: inline-block;
+  background: #4a4fd4;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+  pointer-events: none;
+}
+#dropzone small { display: block; color: #888; font-size: 0.76rem; }
 #fileInput { display: none; }
 #fileList { margin-bottom: 16px; }
 .file-item {
